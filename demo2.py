@@ -54,19 +54,24 @@ def output_video(p, txt, dst):
     files = sorted(files, key=lambda x: int(os.path.splitext(x)[0]))
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    
+
     for file, line in zip(files, txt):
         img = cv2.imread(os.path.join(p, file))
         h, w, _ = img.shape
-        img = cv2.putText(img, line, (w//8, 11*h//12), font, 1.2, (0, 0, 0), 3, cv2.LINE_AA)
-        img = cv2.putText(img, line, (w//8, 11*h//12), font, 1.2, (255, 255, 255), 0, cv2.LINE_AA)  
+        img = cv2.putText(img, line, (w // 8, 11 * h // 12), font, 0.5, (0, 0, 0), 3, cv2.LINE_AA)
+        img = cv2.putText(img, line, (w // 8, 11 * h // 12), font, 0.5, (255, 255, 255), 0, cv2.LINE_AA)
         h = h // 2
         w = w // 2
-        img = cv2.resize(img, (w, h))     
+        img = cv2.resize(img, (w, h))
         cv2.imwrite(os.path.join(p, file), img)
-    
-    cmd = "ffmpeg -y -i {}/%d.jpg -r 25 \'{}\'".format(p, dst)
-    os.system(cmd)
+
+    video_writer = cv2.VideoWriter(dst, cv2.VideoWriter_fourcc(*"mp4v"), 25, (w, h))
+
+    for file in files:
+        img = cv2.imread(os.path.join(p, file))
+        video_writer.write(img)
+
+    video_writer.release()
 
 def transformation_from_points(points1, points2):
     points1 = points1.astype(np.float64)
@@ -88,38 +93,45 @@ def transformation_from_points(points1, points2):
                          np.matrix([0., 0., 1.])])
 
 def load_video(file):
+    cap = cv2.VideoCapture(file)
     p = tempfile.mkdtemp()
-    cmd = 'ffmpeg -i \'{}\' -qscale:v 2 -r 25 \'{}/%d.jpg\''.format(file, p)
-    os.system(cmd)
-    
+
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        cv2.imwrite(os.path.join(p, f"{frame_idx}.jpg"), frame)
+        frame_idx += 1
+
+    cap.release()
+
     files = os.listdir(p)
     files = sorted(files, key=lambda x: int(os.path.splitext(x)[0]))
-        
+
     array = [cv2.imread(os.path.join(p, file)) for file in files]
-    
-    
-    array = list(filter(lambda im: not im is None, array))
-    #array = [cv2.resize(im, (100, 50), interpolation=cv2.INTER_LANCZOS4) for im in array]
-    
+
+    array = list(filter(lambda im: im is not None, array))
+
     fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, device='cuda')
     points = [fa.get_landmarks(I) for I in array]
-    
+
     front256 = get_position(256)
     video = []
     for point, scene in zip(points, array):
-        if(point is not None):
+        if point is not None:
             shape = np.array(point[0])
             shape = shape[17:]
             M = transformation_from_points(np.matrix(shape), np.matrix(front256))
-           
+
             img = cv2.warpAffine(scene, M[:2], (256, 256))
             (x, y) = front256[-20:].mean(0).astype(np.int32)
-            w = 160//2
-            img = img[y-w//2:y+w//2,x-w:x+w,...]
+            w = 160 // 2
+            img = img[y - w // 2:y + w // 2, x - w:x + w, ...]
             img = cv2.resize(img, (128, 64))
             video.append(img)
-    
-    
+
     video = np.stack(video, axis=0).astype(np.float32)
     video = torch.FloatTensor(video.transpose(3, 0, 1, 2)) / 255.0
 
