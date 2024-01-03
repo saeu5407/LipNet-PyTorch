@@ -17,9 +17,9 @@ import tempfile
 import shutil
 import cv2
 import face_alignment
+import argparse
 
-
-
+# TODO : Rotation 함수로 보임
 def get_position(size, padding=0.25):
     
     x = [0.000213256, 0.0752622, 0.18113, 0.29077, 0.393397, 0.586856, 0.689483, 0.799124,
@@ -45,9 +45,6 @@ def get_position(size, padding=0.25):
     x = x * size
     y = y * size
     return np.array(list(zip(x, y)))
-
-def cal_area(anno):
-    return (anno[:,0].max() - anno[:,0].min()) * (anno[:,1].max() - anno[:,1].min()) 
 
 def output_video(p, txt, dst):
     files = os.listdir(p)
@@ -144,7 +141,7 @@ def ctc_decode(y):
     result = []
     for i in range(t+1):
         result.append(MyDataset.ctc_arr2txt(y[:i], start=1))
-    return result
+    return result, y
         
 
 if(__name__ == '__main__'):
@@ -167,12 +164,25 @@ if(__name__ == '__main__'):
         model.load_state_dict(model_dict)
         
     video, img_p = load_video(sys.argv[1])
+    file_name = 'bbaf2n.mp4'
+    video, imp_p = load_video(file_name)
     y = model(video[None,...].cuda())
-    txt = ctc_decode(y[0])
+    txt, ctc_ = ctc_decode(y[0])
     
     output_video(img_p, txt, sys.argv[2])
     
     shutil.rmtree(img_p)
-    
-    
-    
+
+    arr2txt = MyDataset.arr2txt(ctc_, start=1)
+    arr2ctc = MyDataset.ctc_arr2txt(ctc_, start=1)
+
+    # 빈 블루 엣 오 투 나우
+    # ㅣ ㅡㅜ ㅔ ㅗ ㅜ ㅏㅜ
+    # i l ue a o w o w? --> 한국어 모음 학습이 필요해 보임
+
+    # I를 찾았다고 가정하면?
+    cap = cv2.VideoCapture(file_name)
+    idx = 2
+    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+    ret, frame = cap.read()
+    cv2.imwrite('test.png', frame)
